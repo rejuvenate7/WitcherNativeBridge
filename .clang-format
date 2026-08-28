@@ -1,0 +1,15 @@
+BasedOnStyle: Microsoft
+
+ColumnLimit: 9999
+
+BinPackArguments: true
+BinPackParameters: true
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: ForIndentation
+NamespaceIndentation: All
+SortIncludes: false
+
+DerivePointerAlignment: false
+PointerAlignment: Left
