@@ -37,9 +37,8 @@ Create a native function:
 void ExampleInt(void*, void* frame, void* result)
 {
 	int value = WNB_ReadIntParameter(frame);
-	WNB_AdvanceFrame(frame);
 
-	WNB_WriteIntResult(result, value);
+	WNB_ReturnInt(frame, result, value);
 }
 ```
 
@@ -55,11 +54,59 @@ Then import the same function name in WitcherScript:
 import function MyMod_ExampleInt(value : int) : int;
 ```
 
-When reading multiple parameters, read them in the same order as the WitcherScript declaration and call `WNB_AdvanceFrame(frame)` once after all parameters have been read.
+Read parameters in the same order as the WitcherScript declaration, then finish the callback using the matching `WNB_Return*` function.
+
+For example:
+
+```cpp
+void Example(void*, void* frame, void* result)
+{
+	int id = WNB_ReadIntParameter(frame);
+	bool enabled = WNB_ReadBoolParameter(frame);
+
+	WNB_ReturnBool(frame, result, enabled);
+}
+```
+
+```witcherscript
+import function MyMod_Example(id : int, enabled : bool) : bool;
+```
+
+`WNB_Return*` automatically finalizes the WitcherScript call before returning the result.
+
+Available return functions:
+
+```cpp
+WNB_ReturnVoid(frame);
+
+WNB_ReturnInt(frame, result, value);
+WNB_ReturnBool(frame, result, value);
+WNB_ReturnFloat(frame, result, value);
+WNB_ReturnString(frame, result, value, length);
+WNB_ReturnName(frame, result, value);
+WNB_ReturnNameFromString(frame, result, value);
+```
+
+For a WitcherScript function with no return value, use `WNB_ReturnVoid`:
+
+```cpp
+void ExampleVoid(void*, void* frame, void*)
+{
+	int value = WNB_ReadIntParameter(frame);
+
+	// Do something with value...
+
+	WNB_ReturnVoid(frame);
+}
+```
+
+```witcherscript
+import function MyMod_ExampleVoid(value : int);
+```
 
 ## Supported Types
 
-WitcherNativeBridge currently supports reading and writing:
+WitcherNativeBridge currently supports reading and returning:
 
 - `int`
 - `bool`
@@ -75,6 +122,7 @@ The bridge also provides:
 import function WNB_GetApiVersion() : int;
 import function WNB_StringToName(value : string) : name;
 ```
+
 ## Example Project
 
 A ready-to-build example project is included here:
@@ -90,4 +138,5 @@ It already includes the required header, import library, linker settings, and si
 - `WitcherNativeBridge.asi` must be installed for dependent mods to work.
 
 ## Known mods that are using WitcherNativeBridge
+
 - [rejuvenate7/WitcherOnline](https://www.nexusmods.com/witcher3/mods/11590)
