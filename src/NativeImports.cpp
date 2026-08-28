@@ -17,8 +17,7 @@ namespace witcher_native_bridge::imports
 		// import function WNB_GetApiVersion() : int;
 		void GetApiVersionNative(void*, void* frame, void* result)
 		{
-			AdvanceFrame(frame);
-			WriteIntResult(result, static_cast<int>(WNB_GetApiVersion()));
+			ReturnInt(frame, result, static_cast<int>(WNB_GetApiVersion()));
 		}
 
 		// WitcherScript declaration:
@@ -27,19 +26,15 @@ namespace witcher_native_bridge::imports
 		{
 			ScriptString input{};
 			const int readSize = ReadStringParameter(frame, input);
-			AdvanceFrame(frame);
-
-			if (!result)
-				return;
 
 			if (readSize <= 0)
 			{
-				WriteNameResult(result, L"");
+				ReturnNameFromString(frame, result, L"");
 				return;
 			}
 
 			const std::wstring value = ScriptStringToWide(input);
-			WriteNameResult(result, value);
+			ReturnNameFromString(frame, result, value.c_str());
 		}
 	} // namespace
 

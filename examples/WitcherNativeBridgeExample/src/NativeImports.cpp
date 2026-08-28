@@ -20,9 +20,8 @@ namespace wnb_example
 		void IntNative(void*, void* frame, void* result)
 		{
 			int value = WNB_ReadIntParameter(frame);
-			WNB_AdvanceFrame(frame);
 
-			WNB_WriteIntResult(result, value);
+			WNB_ReturnInt(frame, result, value);
 		}
 
 		// WitcherScript:
@@ -30,9 +29,8 @@ namespace wnb_example
 		void BoolNative(void*, void* frame, void* result)
 		{
 			bool value = WNB_ReadBoolParameter(frame);
-			WNB_AdvanceFrame(frame);
 
-			WNB_WriteBoolResult(result, value);
+			WNB_ReturnBool(frame, result, value);
 		}
 
 		// WitcherScript:
@@ -40,9 +38,8 @@ namespace wnb_example
 		void FloatNative(void*, void* frame, void* result)
 		{
 			float value = WNB_ReadFloatParameter(frame);
-			WNB_AdvanceFrame(frame);
 
-			WNB_WriteFloatResult(result, value);
+			WNB_ReturnFloat(frame, result, value);
 		}
 
 		// WitcherScript:
@@ -51,14 +48,12 @@ namespace wnb_example
 		{
 			WNB_String input{};
 			WNB_ReadStringParameter(frame, &input);
-			WNB_AdvanceFrame(frame);
 
 			std::wstring value;
-
 			if (input.data && input.size > 0)
 				value.assign(input.data, input.data + input.size - 1);
 
-			WNB_WriteStringResult(result, value.c_str(), static_cast<uint32_t>(value.size()));
+			WNB_ReturnString(frame, result, value.c_str(), static_cast<uint32_t>(value.size()));
 		}
 
 		// WitcherScript:
@@ -66,9 +61,8 @@ namespace wnb_example
 		void NameNative(void*, void* frame, void* result)
 		{
 			WNB_Name value = WNB_ReadNameParameter(frame);
-			WNB_AdvanceFrame(frame);
 
-			WNB_WriteNameIndexResult(result, value);
+			WNB_ReturnName(frame, result, value);
 		}
 
 		struct NativeRegistration

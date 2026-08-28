@@ -64,6 +64,7 @@ namespace witcher_native_bridge
 		using BufferAllocFn = void* (*)(size_t zero, size_t bytes, size_t kind, size_t tag);
 		using BufferCopyFn = void* (*)(void* destination, const void* source, size_t bytes);
 
+		// These are the same WitcherOnline registration-site signature and offsets.
 		constexpr const char* kRegistrationSignature = "BA 10 00 00 00 B9 C0 00 00 00 E8 ?? ?? ?? ?? 48 8B F8 48 85 C0 74 ?? "
 		                                               "33 D2 41 B8 C0 00 00 00 48 8B C8 E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? "
 		                                               "48 8D 15 ?? ?? ?? ?? 48 8B C8 E8 ?? ?? ?? ?? 4C 8D 05 ?? ?? ?? ?? "
@@ -172,6 +173,7 @@ namespace witcher_native_bridge
 
 		void ResolveStringMarshalling(ScriptApi& api)
 		{
+			// WitcherOnline anchors the VM/string helpers from the existing LogChannel native.
 			void* logChannel = FindExistingNative("LogChannel");
 			if (!logChannel)
 				return;
@@ -645,6 +647,7 @@ namespace witcher_native_bridge
 		if (g_registerHook.IsInstalled())
 			return true;
 
+		// Same validated RegisterGlobal prologue used by WitcherOnline.
 		const std::vector<uint8_t> expectedPrologue = {0x48, 0x89, 0x6C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x20};
 
 		if (!g_registerHook.Install(g_api.registerGlobal, reinterpret_cast<void*>(&RegisterGlobalDetour), expectedPrologue))
@@ -686,6 +689,10 @@ namespace witcher_native_bridge
 
 		DebugLog("queued native: " + ownedName);
 
+		// Registration itself stays on REDengine's RegisterGlobal thread. Calls
+		// made by consumer startup threads are queued until the engine reaches
+		// another native registration callback. A native callback that registers
+		// another native while already on that thread can be flushed immediately.
 		if (g_registrationPhaseStarted.load(std::memory_order_acquire) && g_registrationThreadId.load(std::memory_order_acquire) == GetCurrentThreadId())
 			FlushPendingRegistrations();
 
@@ -851,6 +858,47 @@ namespace witcher_native_bridge
 	{
 		WriteNameResult(result, value.c_str());
 	}
+
+	void ReturnVoid(void* frame)
+	{
+		AdvanceFrame(frame);
+	}
+
+	void ReturnInt(void* frame, void* result, int value)
+	{
+		AdvanceFrame(frame);
+		WriteIntResult(result, value);
+	}
+
+	void ReturnBool(void* frame, void* result, bool value)
+	{
+		AdvanceFrame(frame);
+		WriteBoolResult(result, value);
+	}
+
+	void ReturnFloat(void* frame, void* result, float value)
+	{
+		AdvanceFrame(frame);
+		WriteFloatResult(result, value);
+	}
+
+	bool ReturnString(void* frame, void* result, const wchar_t* value, size_t length)
+	{
+		AdvanceFrame(frame);
+		return WriteStringResult(result, value, length);
+	}
+
+	void ReturnName(void* frame, void* result, WNB_Name value)
+	{
+		AdvanceFrame(frame);
+		WriteNameIndexResult(result, value);
+	}
+
+	void ReturnNameFromString(void* frame, void* result, const wchar_t* value)
+	{
+		AdvanceFrame(frame);
+		WriteNameResult(result, value);
+	}
 } // namespace witcher_native_bridge
 
 extern "C" uint32_t WNB_GetApiVersion()
@@ -861,11 +909,6 @@ extern "C" uint32_t WNB_GetApiVersion()
 extern "C" bool WNB_RegisterNative(const char* name, WNB_NativeImplementation implementation)
 {
 	return witcher_native_bridge::QueueNativeRegistration(name, implementation);
-}
-
-extern "C" void WNB_AdvanceFrame(void* frame)
-{
-	witcher_native_bridge::AdvanceFrame(frame);
 }
 
 extern "C" int WNB_ReadIntParameter(void* frame)
@@ -896,35 +939,43 @@ extern "C" int WNB_ReadStringParameter(void* frame, WNB_String* text)
 	return witcher_native_bridge::ReadStringParameter(frame, *text);
 }
 
-extern "C" void WNB_WriteIntResult(void* result, int value)
+extern "C" void WNB_ReturnVoid(void* frame)
 {
-	witcher_native_bridge::WriteIntResult(result, value);
+	witcher_native_bridge::ReturnVoid(frame);
 }
 
-extern "C" void WNB_WriteBoolResult(void* result, bool value)
+extern "C" void WNB_ReturnInt(void* frame, void* result, int value)
 {
-	witcher_native_bridge::WriteBoolResult(result, value);
+	witcher_native_bridge::ReturnInt(frame, result, value);
 }
 
-extern "C" void WNB_WriteFloatResult(void* result, float value)
+extern "C" void WNB_ReturnBool(void* frame, void* result, bool value)
 {
-	witcher_native_bridge::WriteFloatResult(result, value);
+	witcher_native_bridge::ReturnBool(frame, result, value);
 }
 
-extern "C" bool WNB_WriteStringResult(void* result, const wchar_t* value, uint32_t length)
+extern "C" void WNB_ReturnFloat(void* frame, void* result, float value)
+{
+	witcher_native_bridge::ReturnFloat(frame, result, value);
+}
+
+extern "C" bool WNB_ReturnString(void* frame, void* result, const wchar_t* value, uint32_t length)
 {
 	if (!value)
+	{
+		witcher_native_bridge::ReturnVoid(frame);
 		return false;
+	}
 
-	return witcher_native_bridge::WriteStringResult(result, value, static_cast<size_t>(length));
+	return witcher_native_bridge::ReturnString(frame, result, value, static_cast<size_t>(length));
 }
 
-extern "C" void WNB_WriteNameIndexResult(void* result, WNB_Name value)
+extern "C" void WNB_ReturnName(void* frame, void* result, WNB_Name value)
 {
-	witcher_native_bridge::WriteNameIndexResult(result, value);
+	witcher_native_bridge::ReturnName(frame, result, value);
 }
 
-extern "C" void WNB_WriteNameResult(void* result, const wchar_t* value)
+extern "C" void WNB_ReturnNameFromString(void* frame, void* result, const wchar_t* value)
 {
-	witcher_native_bridge::WriteNameResult(result, value);
+	witcher_native_bridge::ReturnNameFromString(frame, result, value);
 }
