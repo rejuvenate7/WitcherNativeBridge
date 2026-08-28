@@ -1,8 +1,6 @@
 # WitcherNativeBridge
 
-Shared native bridge API for **The Witcher 3**, allowing C++ ASI mods to register custom WitcherScript import functions through one common bridge.
-
-This avoids every ASI mod needing to implement its own REDengine native registration hook.
+Shared native bridge API for **The Witcher 3**, allowing C++ ASI mods to register custom WitcherScript import functions through one API.
 
 ## Building
 
@@ -87,10 +85,8 @@ It already includes the required header, import library, linker settings, and si
 
 ## Notes
 
-- Native function names must be unique.
-- Prefix your native names with your mod name.
-- Register natives during ASI startup.
-- Mods using registered callbacks should remain loaded for the lifetime of the game.
+- Native function names must be unique. It is recommended to prefix your import functions with your mod name like `WO_Send()`.
+- Functions must be registered at game startup and registered callbacks should remain loaded for the lifetime of the game.
 - `WitcherNativeBridge.asi` must be installed for dependent mods to work.
 
 ## Known mods that are using WitcherNativeBridge
