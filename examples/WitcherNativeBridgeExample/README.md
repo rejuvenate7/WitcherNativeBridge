@@ -44,4 +44,7 @@ import function Example_Name(value : name) : name;
 
 When adding parameters, read them in the same order as the WitcherScript declaration and call `WNB_AdvanceFrame(frame)` once after all parameters have been read.
 
-`WitcherNativeBridge.asi` must be installed in the game for mods built with the API to work.
+## Building
+Build the solution in Release mode and include the .asi in The Witcher 3's `bin/x64` and `bin/x64_dx12` folders.
+
+Both `WitcherNativeBridge.asi` (API) and your own built .asi must be in the root directories (near witcher3.exe), and loaded using an [.asi loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases).
