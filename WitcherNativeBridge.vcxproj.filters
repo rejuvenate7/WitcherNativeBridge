@@ -15,42 +15,42 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GameModule.h">
+    <ClInclude Include="src\GameModule.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="InlineHook.h">
+    <ClInclude Include="src\InlineHook.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="NativeBridge.h">
+    <ClInclude Include="src\NativeBridge.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="NativeImports.h">
+    <ClInclude Include="src\NativeImports.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SignatureScanner.h">
+    <ClInclude Include="src\SignatureScanner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="WitcherNativeBridgeApi.h">
+    <ClInclude Include="include\WitcherNativeBridgeApi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="dllmain.cpp">
+    <ClCompile Include="src\dllmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GameModule.cpp">
+    <ClCompile Include="src\GameModule.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="InlineHook.cpp">
+    <ClCompile Include="src\InlineHook.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="NativeBridge.cpp">
+    <ClCompile Include="src\NativeBridge.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="NativeImports.cpp">
+    <ClCompile Include="src\NativeImports.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SignatureScanner.cpp">
+    <ClCompile Include="src\SignatureScanner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
