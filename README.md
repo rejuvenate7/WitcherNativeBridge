@@ -6,7 +6,7 @@ Shared native bridge API for **The Witcher 3**, allowing C++ ASI mods to registe
 
 Requirements:
 
-- Visual Studio 2022
+- Visual Studio 2022 or newer
 - x64
 - C++17
 
