@@ -137,6 +137,10 @@ It already includes the required header, import library, linker settings, and si
 - Functions must be registered at game startup and registered callbacks should remain loaded for the lifetime of the game.
 - `WitcherNativeBridge.asi` must be installed for dependent mods to work.
 
+## Credits
+- [Flawkee](https://github.com/flawkee) - Created native import function system
+- [rejuvenate7](https://github.com/rejuvenate7/WitcherOnline) - Created standalone api with it
+
 ## Known mods that are using WitcherNativeBridge
 
 - [rejuvenate7/WitcherOnline](https://www.nexusmods.com/witcher3/mods/11590)
