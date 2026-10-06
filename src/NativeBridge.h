@@ -41,8 +41,6 @@ namespace witcher_native_bridge
 	void WriteNameResult(void* result, const wchar_t* value);
 	void WriteNameResult(void* result, const std::wstring& value);
 
-	// Internal return helpers. These finalize the VM argument frame and then
-	// write the native result. Public consumers use the exported WNB_Return* API.
 	void ReturnVoid(void* frame);
 	void ReturnInt(void* frame, void* result, int value);
 	void ReturnBool(void* frame, void* result, bool value);

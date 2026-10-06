@@ -35,13 +35,23 @@ namespace
 		if (!PinBridgeModule())
 			witcher_native_bridge::DebugLog("warning: failed to pin bridge module");
 
+		if (witcher_native_bridge::GameModule::Resolve())
+		{
+			witcher_native_bridge::DebugLog("host=" + witcher_native_bridge::GameModule::HostName() + " version=" + witcher_native_bridge::GameModule::Version());
+		}
+		else
+		{
+			witcher_native_bridge::DebugLog("failed to resolve host module");
+			return 0;
+		}
+
 		if (!witcher_native_bridge::ResolveScriptApi())
 		{
 			witcher_native_bridge::DebugLog("script API signature resolution failed");
 			return 0;
 		}
 
-		witcher_native_bridge::DebugLog("script API resolved for " + witcher_native_bridge::GameModule::HostName() + " version " + witcher_native_bridge::GameModule::Version());
+		witcher_native_bridge::DebugLog("script API resolved");
 
 		if (witcher_native_bridge::CanMarshalStrings())
 		{

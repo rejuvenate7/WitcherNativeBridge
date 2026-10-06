@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <set>
@@ -36,7 +37,7 @@ namespace witcher_native_bridge
 			void* opcodeTable = nullptr;
 			void* bufferAlloc = nullptr;
 			void* bufferCopy = nullptr;
-			const wchar_t** emptyString = nullptr;
+			const char** emptyString = nullptr;
 			const int* emptyStringLength = nullptr;
 
 			size_t matches = 0;
@@ -53,10 +54,16 @@ namespace witcher_native_bridge
 			}
 		};
 
-		using AllocFn = void* (*)(size_t size, size_t alignment);
+		struct AllocationResult
+		{
+			void* data = nullptr;
+			size_t size = 0;
+		};
+
+		using AllocFn = AllocationResult* (*)(AllocationResult* result, size_t size, size_t alignment);
 		using MemsetFn = void* (*)(void* destination, int value, size_t size);
 		using NamePoolFn = void* (*)();
-		using AddNameFn = int (*)(void* pool, const wchar_t* name);
+		using AddNameFn = int (*)(void* pool, const char* name);
 		using FunctionCtorFn = void* (*)(void* self, int* nameIndex, void* implementation);
 		using ScriptSystemFn = void* (*)();
 		using RegisterGlobalFn = void (*)(void* system, void* function);
@@ -64,25 +71,26 @@ namespace witcher_native_bridge
 		using BufferAllocFn = void* (*)(size_t zero, size_t bytes, size_t kind, size_t tag);
 		using BufferCopyFn = void* (*)(void* destination, const void* source, size_t bytes);
 
-		// These are the same WitcherOnline registration-site signature and offsets.
-		constexpr const char* kRegistrationSignature = "BA 10 00 00 00 B9 C0 00 00 00 E8 ?? ?? ?? ?? 48 8B F8 48 85 C0 74 ?? "
-		                                               "33 D2 41 B8 C0 00 00 00 48 8B C8 E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? "
-		                                               "48 8D 15 ?? ?? ?? ?? 48 8B C8 E8 ?? ?? ?? ?? 4C 8D 05 ?? ?? ?? ?? "
+		constexpr const char* kRegistrationSignature = "BA F8 00 00 00 48 8D 4D F0 41 B8 10 00 00 00 E8 ?? ?? ?? ?? "
+		                                               "48 8B 7D F0 33 D2 4C 8B 45 F8 48 8B CF E8 ?? ?? ?? ?? "
+		                                               "48 85 FF 74 ?? E8 ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? "
+		                                               "48 8B C8 E8 ?? ?? ?? ?? 4C 8D 05 ?? ?? ?? ?? "
 		                                               "89 45 10 48 8D 55 10 48 8B CF E8 ?? ?? ?? ?? "
-		                                               "48 8B F8 EB ?? 48 8B FB E8 ?? ?? ?? ?? 48 8B C8 48 8B D7 E8 ?? ?? ?? ??";
+		                                               "48 8B F8 EB ?? 48 8B FB E8 ?? ?? ?? ?? "
+		                                               "48 8B D7 48 8B C8 E8 ?? ?? ?? ??";
 
-		constexpr int kOffsetName = 44;
-		constexpr int kOffsetImplementation = 59;
-		constexpr int kOffsetAlloc = 10;
-		constexpr int kOffsetMemset = 34;
-		constexpr int kOffsetNamePool = 39;
-		constexpr int kOffsetAddName = 54;
-		constexpr int kOffsetFunctionCtor = 76;
-		constexpr int kOffsetScriptSystem = 89;
-		constexpr int kOffsetRegisterGlobal = 100;
+		constexpr int kOffsetAlloc = 15;
+		constexpr int kOffsetMemset = 33;
+		constexpr int kOffsetNamePool = 43;
+		constexpr int kOffsetName = 48;
+		constexpr int kOffsetAddName = 58;
+		constexpr int kOffsetImplementation = 63;
+		constexpr int kOffsetFunctionCtor = 80;
+		constexpr int kOffsetScriptSystem = 93;
+		constexpr int kOffsetRegisterGlobal = 104;
 		constexpr size_t kMinimumMatches = 32;
 
-		constexpr size_t kFunctionObjectSize = 0xC0;
+		constexpr size_t kFunctionObjectSize = 0xF8;
 		constexpr size_t kFunctionObjectAlignment = 0x10;
 
 		ScriptApi g_api{};
@@ -117,15 +125,15 @@ namespace witcher_native_bridge
 			return SignatureScanner::ResolveRelative(site + offset, 3, 7);
 		}
 
-		std::string NarrowAsciiName(const wchar_t* value, size_t limit = 96)
+		std::string NarrowAsciiName(const char* value, size_t limit = 96)
 		{
 			std::string out;
 			if (!value)
 				return out;
 
-			for (size_t i = 0; i < limit && value[i] != L'\0'; ++i)
+			for (size_t i = 0; i < limit && value[i] != '\0'; ++i)
 			{
-				const wchar_t ch = value[i];
+				const unsigned char ch = static_cast<unsigned char>(value[i]);
 				if (ch < 32 || ch > 126)
 					return {};
 				out.push_back(static_cast<char>(ch));
@@ -173,10 +181,12 @@ namespace witcher_native_bridge
 
 		void ResolveStringMarshalling(ScriptApi& api)
 		{
-			// WitcherOnline anchors the VM/string helpers from the existing LogChannel native.
 			void* logChannel = FindExistingNative("LogChannel");
 			if (!logChannel)
+			{
+				DebugLog("string marshalling: LogChannel native was not found");
 				return;
+			}
 
 			auto* code = static_cast<uint8_t*>(logChannel);
 
@@ -197,57 +207,26 @@ namespace witcher_native_bridge
 				}
 			}
 
-			const SignaturePattern allocatorPattern = SignaturePattern::Parse("44 8D 49 0E 44 8D 41 02 E8 ?? ?? ?? ??");
+			const SignaturePattern stringPattern = SignaturePattern::Parse("8B 15 ?? ?? ?? ?? 33 C9 41 B9 0E 00 00 00 89 54 24 ?? "
+			                                                               "41 B8 01 00 00 00 E8 ?? ?? ?? ?? 44 8B 44 24 ?? 48 8B C8 "
+			                                                               "48 8B 15 ?? ?? ?? ?? 48 89 44 24 ?? E8 ?? ?? ?? ??");
 
-			for (int i = 0; i < 0xC0; ++i)
+			const ModuleRegion logChannelRegion{code, 0xC0};
+			const std::vector<uint8_t*> stringSites = SignatureScanner::FindAll(logChannelRegion, stringPattern, 2);
+			if (stringSites.size() == 1)
 			{
-				if (allocatorPattern.MatchesAt(code + i))
-				{
-					api.bufferAlloc = SignatureScanner::ResolveRelative(code + i + 8, 1, 5);
-					break;
-				}
+				uint8_t* anchor = stringSites.front();
+				api.emptyStringLength = reinterpret_cast<const int*>(SignatureScanner::ResolveRelative(anchor, 2, 6));
+				api.bufferAlloc = SignatureScanner::ResolveRelative(anchor + 24, 1, 5);
+				api.emptyString = reinterpret_cast<const char**>(SignatureScanner::ResolveRelative(anchor + 37, 3, 7));
+				api.bufferCopy = SignatureScanner::ResolveRelative(anchor + 49, 1, 5);
+			}
+			else
+			{
+				DebugLog("string marshalling: LogChannel helper pattern matches=" + std::to_string(stringSites.size()));
 			}
 
-			for (int i = 0; i < 0xC0; ++i)
-			{
-				if (code[i] == 0x48 && code[i + 1] == 0x8B && code[i + 2] == 0x15)
-				{
-					api.emptyString = reinterpret_cast<const wchar_t**>(SignatureScanner::ResolveRelative(code + i, 3, 7));
-					break;
-				}
-			}
-
-			for (int i = 0; i < 0x40; ++i)
-			{
-				if (code[i] == 0x8B && code[i + 1] == 0x05)
-				{
-					api.emptyStringLength = reinterpret_cast<const int*>(SignatureScanner::ResolveRelative(code + i, 2, 6));
-					break;
-				}
-			}
-
-			if (api.bufferAlloc)
-			{
-				for (int i = 0; i < 0xC0; ++i)
-				{
-					if (code[i] != 0xE8)
-						continue;
-
-					void* target = SignatureScanner::ResolveRelative(code + i, 1, 5);
-					if (target != api.bufferAlloc)
-						continue;
-
-					for (int j = i + 5; j < i + 0x30; ++j)
-					{
-						if (code[j] == 0xE8)
-						{
-							api.bufferCopy = SignatureScanner::ResolveRelative(code + j, 1, 5);
-							break;
-						}
-					}
-					break;
-				}
-			}
+			DebugLog(std::string("string marshalling components: opcode=") + (api.opcodeTable ? "OK" : "missing") + " alloc=" + (api.bufferAlloc ? "OK" : "missing") + " copy=" + (api.bufferCopy ? "OK" : "missing") + " empty=" + (api.emptyString ? "OK" : "missing") + " length=" + (api.emptyStringLength ? "OK" : "missing"));
 		}
 
 		void* ConsensusAddress(const std::vector<void*>& values, size_t& agreeing)
@@ -291,13 +270,47 @@ namespace witcher_native_bridge
 				handler(context, frame, destination);
 		}
 
+		bool WideToUtf8(const wchar_t* value, size_t length, std::string& out)
+		{
+			out.clear();
+			if (length == 0)
+				return true;
+			if (!value || length > static_cast<size_t>((std::numeric_limits<int>::max)()))
+				return false;
+
+			const int sourceLength = static_cast<int>(length);
+			const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, sourceLength, nullptr, 0, nullptr, nullptr);
+			if (bytes <= 0)
+				return false;
+
+			out.resize(static_cast<size_t>(bytes));
+			return WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, sourceLength, out.data(), bytes, nullptr, nullptr) == bytes;
+		}
+
+		std::wstring Utf8ToWide(const char* value, size_t length)
+		{
+			if (!value || length == 0 || length > static_cast<size_t>((std::numeric_limits<int>::max)()))
+				return {};
+
+			const int sourceLength = static_cast<int>(length);
+			const int characters = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, sourceLength, nullptr, 0);
+			if (characters <= 0)
+				return {};
+
+			std::wstring out(static_cast<size_t>(characters), L'\0');
+			if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, sourceLength, out.data(), characters) != characters)
+				return {};
+
+			return out;
+		}
+
 		bool MakeEmptyScriptString(ScriptString& value)
 		{
 			if (!g_api.CanMarshalStrings())
 				return false;
 
 			const int length = *g_api.emptyStringLength;
-			const wchar_t* source = *g_api.emptyString;
+			const char* source = *g_api.emptyString;
 			if (length < 0 || length > 64)
 				return false;
 
@@ -311,12 +324,12 @@ namespace witcher_native_bridge
 			auto allocate = reinterpret_cast<BufferAllocFn>(g_api.bufferAlloc);
 			auto copy = reinterpret_cast<BufferCopyFn>(g_api.bufferCopy);
 
-			void* buffer = allocate(0, static_cast<size_t>(length) * sizeof(wchar_t), 2, 14);
+			void* buffer = allocate(0, static_cast<size_t>(length), 1, 14);
 			if (!buffer)
 				return false;
 
-			copy(buffer, source, static_cast<size_t>(length) * sizeof(wchar_t));
-			value.data = static_cast<wchar_t*>(buffer);
+			copy(buffer, source, static_cast<size_t>(length));
+			value.data = reinterpret_cast<decltype(value.data)>(buffer);
 			return true;
 		}
 
@@ -327,6 +340,13 @@ namespace witcher_native_bridge
 
 		int InternNameUnguarded(const wchar_t* value)
 		{
+			if (!value)
+				return 0;
+
+			std::string utf8;
+			if (!WideToUtf8(value, std::wcslen(value), utf8))
+				return 0;
+
 			auto getPool = reinterpret_cast<NamePoolFn>(g_api.namePool);
 			auto addName = reinterpret_cast<AddNameFn>(g_api.addName);
 
@@ -334,7 +354,7 @@ namespace witcher_native_bridge
 			if (!pool)
 				return 0;
 
-			return addName(pool, value);
+			return addName(pool, utf8.c_str());
 		}
 
 		int InternNameGuarded(const wchar_t* value)
@@ -357,18 +377,25 @@ namespace witcher_native_bridge
 			auto allocate = reinterpret_cast<BufferAllocFn>(g_api.bufferAlloc);
 			auto copy = reinterpret_cast<BufferCopyFn>(g_api.bufferCopy);
 
-			const size_t characters = length + 1;
-			void* buffer = allocate(0, characters * sizeof(wchar_t), 2, 14);
+			std::string utf8;
+			if (!WideToUtf8(value, length, utf8))
+				return false;
+
+			const size_t bytes = utf8.size() + 1;
+			if (bytes > static_cast<size_t>((std::numeric_limits<uint32_t>::max)()))
+				return false;
+
+			void* buffer = allocate(0, bytes, 1, 14);
 			if (!buffer)
 				return false;
 
-			if (length > 0)
-				copy(buffer, value, length * sizeof(wchar_t));
-			static_cast<wchar_t*>(buffer)[length] = L'\0';
+			if (!utf8.empty())
+				copy(buffer, utf8.data(), utf8.size());
+			static_cast<char*>(buffer)[utf8.size()] = '\0';
 
 			auto* destination = static_cast<ScriptString*>(result);
-			destination->data = static_cast<wchar_t*>(buffer);
-			destination->size = static_cast<uint32_t>(characters);
+			destination->data = reinterpret_cast<decltype(destination->data)>(buffer);
+			destination->size = static_cast<uint32_t>(bytes);
 			destination->padding = 0;
 			return true;
 		}
@@ -385,7 +412,7 @@ namespace witcher_native_bridge
 			}
 		}
 
-		void* RegisterNativeUnguarded(const wchar_t* name, NativeImplementation implementation)
+		void* RegisterNativeUnguarded(const char* name, NativeImplementation implementation)
 		{
 			auto alloc = reinterpret_cast<AllocFn>(g_api.alloc);
 			auto zero = reinterpret_cast<MemsetFn>(g_api.memsetFn);
@@ -395,11 +422,14 @@ namespace witcher_native_bridge
 			auto getSystem = reinterpret_cast<ScriptSystemFn>(g_api.scriptSystem);
 			auto registerGlobal = reinterpret_cast<RegisterGlobalFn>(g_registerHook.Trampoline());
 
-			void* storage = alloc(kFunctionObjectSize, kFunctionObjectAlignment);
-			if (!storage)
+			AllocationResult allocation{};
+			alloc(&allocation, kFunctionObjectSize, kFunctionObjectAlignment);
+
+			void* storage = allocation.data;
+			if (!storage || allocation.size < kFunctionObjectSize)
 				return nullptr;
 
-			zero(storage, 0, kFunctionObjectSize);
+			zero(storage, 0, allocation.size);
 
 			void* pool = getPool();
 			if (!pool)
@@ -434,17 +464,12 @@ namespace witcher_native_bridge
 			return length > 0;
 		}
 
-		std::wstring WidenAsciiName(const std::string& name)
-		{
-			return std::wstring(name.begin(), name.end());
-		}
-
 		bool ConflictsWithExistingGameNative(const std::string& name)
 		{
 			return g_existingNatives.find(name) != g_existingNatives.end();
 		}
 
-		bool RegisterNativeImmediateGuarded(const wchar_t* name, NativeImplementation implementation)
+		bool RegisterNativeImmediateGuarded(const char* name, NativeImplementation implementation)
 		{
 			__try
 			{
@@ -467,8 +492,7 @@ namespace witcher_native_bridge
 				return false;
 			}
 
-			const std::wstring wideName = WidenAsciiName(registration.name);
-			return RegisterNativeImmediateGuarded(wideName.c_str(), registration.implementation);
+			return RegisterNativeImmediateGuarded(registration.name.c_str(), registration.implementation);
 		}
 
 		void FlushPendingRegistrations()
@@ -549,17 +573,31 @@ namespace witcher_native_bridge
 
 		g_bindingAttempted = true;
 
-		if (!GameModule::Resolve() || GameModule::IsSelfHosted())
+		if (!GameModule::Resolve())
+		{
+			DebugLog("script API: failed to resolve the host image");
 			return false;
+		}
+		if (GameModule::IsSelfHosted())
+		{
+			DebugLog("script API: bridge was loaded as the host image");
+			return false;
+		}
 
 		const SignaturePattern pattern = SignaturePattern::Parse(kRegistrationSignature);
 		if (!pattern.IsValid())
+		{
+			DebugLog("script API: registration pattern is invalid");
 			return false;
+		}
 
 		std::vector<uint8_t*> sites = SignatureScanner::FindAll(GameModule::Text(), pattern);
 		g_api.matches = sites.size();
 		if (sites.size() < kMinimumMatches)
+		{
+			DebugLog("script API: registration sites=" + std::to_string(g_api.matches) + " (minimum " + std::to_string(kMinimumMatches) + ")");
 			return false;
+		}
 
 		std::vector<void*> allocs;
 		std::vector<void*> memsets;
@@ -581,7 +619,7 @@ namespace witcher_native_bridge
 
 		for (uint8_t* site : sites)
 		{
-			const auto* name = static_cast<const wchar_t*>(ResolveLea(site, kOffsetName));
+			const auto* name = static_cast<const char*>(ResolveLea(site, kOffsetName));
 			void* implementation = ResolveLea(site, kOffsetImplementation);
 
 			if (name && implementation)
@@ -647,8 +685,7 @@ namespace witcher_native_bridge
 		if (g_registerHook.IsInstalled())
 			return true;
 
-		// Same validated RegisterGlobal prologue used by WitcherOnline.
-		const std::vector<uint8_t> expectedPrologue = {0x48, 0x89, 0x6C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x20};
+		const std::vector<uint8_t> expectedPrologue = {0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x20};
 
 		if (!g_registerHook.Install(g_api.registerGlobal, reinterpret_cast<void*>(&RegisterGlobalDetour), expectedPrologue))
 		{
@@ -689,10 +726,6 @@ namespace witcher_native_bridge
 
 		DebugLog("queued native: " + ownedName);
 
-		// Registration itself stays on REDengine's RegisterGlobal thread. Calls
-		// made by consumer startup threads are queued until the engine reaches
-		// another native registration callback. A native callback that registers
-		// another native while already on that thread can be flushed immediately.
 		if (g_registrationPhaseStarted.load(std::memory_order_acquire) && g_registrationThreadId.load(std::memory_order_acquire) == GetCurrentThreadId())
 			FlushPendingRegistrations();
 
@@ -787,23 +820,17 @@ namespace witcher_native_bridge
 			return {};
 
 		const uint32_t length = LogicalStringLength(text);
-		return std::wstring(text.data, text.data + length);
+		return Utf8ToWide(reinterpret_cast<const char*>(text.data), length);
 	}
 
 	std::string ScriptStringToUtf8Lossy(const ScriptString& text)
 	{
-		std::string out;
 		if (!text.data)
-			return out;
+			return {};
 
 		const uint32_t length = LogicalStringLength(text);
-		out.reserve(length);
-		for (uint32_t i = 0; i < length; ++i)
-		{
-			const wchar_t ch = text.data[i];
-			out.push_back(ch < 256 ? static_cast<char>(ch) : '?');
-		}
-		return out;
+		const char* bytes = reinterpret_cast<const char*>(text.data);
+		return std::string(bytes, bytes + length);
 	}
 
 	void WriteIntResult(void* result, int value)
