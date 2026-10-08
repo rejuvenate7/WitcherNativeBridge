@@ -123,13 +123,14 @@ import function WNB_GetApiVersion() : int;
 import function WNB_StringToName(value : string) : name;
 ```
 
-## Example Project
+## Example Projects
 
-A ready-to-build example project is included here:
+Ready-to-build example projects for Next Gen (v4.04) and Remastered (v5.00+) are included here:
 
-[`examples/WitcherNativeBridgeExample`](examples/WitcherNativeBridgeExample)
+[`examples/Example4.04`](examples/Example4.04)
+[`examples/ExampleRemastered`](examples/ExampleRemastered)
 
-It already includes the required header, import library, linker settings, and simple examples for each supported type.
+Each solution already includes the required header, import library, linker settings, and simple examples for each supported type.
 
 ## Notes
 
