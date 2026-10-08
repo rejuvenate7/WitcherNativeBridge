@@ -208,7 +208,7 @@ namespace witcher_native_bridge
 			}
 
 			const SignaturePattern stringPattern = SignaturePattern::Parse("8B 15 ?? ?? ?? ?? 33 C9 41 B9 0E 00 00 00 89 54 24 ?? "
-			                                                               "41 B8 01 00 00 00 E8 ?? ?? ?? ?? 44 8B 44 24 ?? 48 8B C8 "
+			                                                               "41 B8 01 00 00 00 48 C7 44 24 20 00 00 00 00 E8 ?? ?? ?? ?? 44 8B 44 24 ?? 48 8B C8 "
 			                                                               "48 8B 15 ?? ?? ?? ?? 48 89 44 24 ?? E8 ?? ?? ?? ??");
 
 			const ModuleRegion logChannelRegion{code, 0xC0};
@@ -217,9 +217,9 @@ namespace witcher_native_bridge
 			{
 				uint8_t* anchor = stringSites.front();
 				api.emptyStringLength = reinterpret_cast<const int*>(SignatureScanner::ResolveRelative(anchor, 2, 6));
-				api.bufferAlloc = SignatureScanner::ResolveRelative(anchor + 24, 1, 5);
-				api.emptyString = reinterpret_cast<const char**>(SignatureScanner::ResolveRelative(anchor + 37, 3, 7));
-				api.bufferCopy = SignatureScanner::ResolveRelative(anchor + 49, 1, 5);
+				api.bufferAlloc = SignatureScanner::ResolveRelative(anchor + 33, 1, 5);
+				api.emptyString = reinterpret_cast<const char**>(SignatureScanner::ResolveRelative(anchor + 46, 3, 7));
+				api.bufferCopy = SignatureScanner::ResolveRelative(anchor + 58, 1, 5);
 			}
 			else
 			{
