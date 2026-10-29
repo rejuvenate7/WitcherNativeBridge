@@ -393,10 +393,13 @@ namespace witcher_native_bridge
 				copy(buffer, utf8.data(), utf8.size());
 			static_cast<char*>(buffer)[utf8.size()] = '\0';
 
+			// The game's script String is 12 bytes (data pointer + uint32 size; array<string>
+			// elements are 12 bytes apart). WNB_String's padding lies past its end: writing it
+			// would zero the first 4 bytes of whatever follows the result (the next array
+			// element, the next class property or local), so only data and size are written.
 			auto* destination = static_cast<ScriptString*>(result);
 			destination->data = reinterpret_cast<decltype(destination->data)>(buffer);
 			destination->size = static_cast<uint32_t>(bytes);
-			destination->padding = 0;
 			return true;
 		}
 
